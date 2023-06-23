@@ -1,33 +1,39 @@
-import logging
-import importlib
-from aiogram import Bot, types
-from aiogram.dispatcher import Dispatcher
-from aiogram.utils import executor
+import requests
+from aiogram import types
+from hikka_bot import dp
 
-# Включаем логирование
-logging.basicConfig(level=logging.INFO)
+# Обрабатываем команду .pogoda
+@dp.message_handler(commands=['pogoda'])
+async def pogoda_handler(message: types.Message):
+    # Получаем аргументы команды (город)
+    city = message.get_args()
+    
+    if city == '':
+        await message.reply('Укажите название города.')
+        return
 
-# Создаем бота и диспетчера
-bot = Bot(token='YOUR_TELEGRAM_TOKEN')
-dp = Dispatcher(bot)
-
-# Обрабатываем команду /start
-@dp.message_handler(commands=['start'])
-async def start_handler(message: types.Message):
-    await message.reply('Привет, это твой user-бот Hikka!')
-
-# Обрабатываем команду /dlmod
-@dp.message_handler(commands=['dlmod'])
-async def dlmod_handler(message: types.Message):
-    module_name = message.get_args()
+    # Формируем URL для запроса погоды
+    url = f'http://api.openweathermap.org/data/2.5/weather?q={city}&units=metric&appid=YOUR_API_KEY'
     
     try:
-        module = importlib.import_module(module_name)
-        await message.reply(f'Модуль {module_name} успешно загружен и установлен!')
-    except ModuleNotFoundError:
-        await message.reply(f'Модуль {module_name} не найден.')
+        # Отправляем запрос на получение данных о погоде
+        response = requests.get(url)
+        data = response.json()
+
+        # Если получены данные о погоде
+        if 'main' in data:
+            temperature = data['main']['temp']
+            description = data['weather'][0]['description']
+            city_name = data['name']
+            
+            # Формируем ответное сообщение
+            weather_message = f'Погода в городе {city_name}:\nТемпература: {temperature}°C\nОписание: {description}'
+            await message.reply(weather_message)
+        # Если произошла ошибка при получении данных о погоде
+        elif 'message' in data:
+            error_message = data['message']
+            await message.reply(f'Ошибка при получении погоды: {error_message}')
+        else:
+            await message.reply('Не удалось получить информацию о погоде. Попробуйте позже.')
     except Exception as e:
-        await message.reply(f'Ошибка при загрузке и установке модуля {module_name}: {e}')
-        
-# Запускаем бота
-executor.start_polling(dp, skip_updates=True)
+        await message.reply(f'Произошла ошибка при запросе погоды: {e}')
